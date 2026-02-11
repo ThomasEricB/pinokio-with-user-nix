@@ -7,7 +7,7 @@
     pkgs = nixpkgs.legacyPackages.x86_64-linux;
   in {
     packages.x86_64-linux = {
-      pinokio = pkgs.callPackage ./package_for_pinokio.nix {};
+      pinokio = pkgs.callPackage ./pinokio.nix {};
       default = self.packages.x86_64-linux.pinokio;
     };
   };
