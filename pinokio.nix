@@ -92,16 +92,34 @@ stdenv.mkDerivation rec {
     runHook preInstall
 
     # Main application files (mirrors PKGBUILD's /opt/Pinokio layout)
-    mkdir -p "$out/opt/Pinokio" "$out/bin" "$out/share"
+    mkdir -p "$out/opt/Pinokio" "$out/bin" "$out/share/applications"
     cp -r opt/Pinokio/* "$out/opt/Pinokio/"
 
-    # Desktop file and icons
-    cp -r usr/share/* "$out/share/"
+    # Copy icons from the upstream .deb (if present)
+    if [ -d usr/share/icons ]; then
+      mkdir -p "$out/share/icons"
+      cp -r usr/share/icons/* "$out/share/icons/"
+    fi
+    if [ -d usr/share/pixmaps ]; then
+      mkdir -p "$out/share/pixmaps"
+      cp -r usr/share/pixmaps/* "$out/share/pixmaps/"
+    fi
 
-    # Fix paths inside the .desktop file
-    substituteInPlace "$out/share/applications/pinokio.desktop" \
-      --replace-fail "/opt/Pinokio/pinokio" "$out/bin/pinokio" \
-      --replace-fail "/opt/Pinokio" "$out/opt/Pinokio"
+    # Write a clean .desktop file instead of patching the upstream one.
+    # The upstream .deb periodically changes internal paths, which breaks
+    # substituteInPlace. Generating our own avoids that fragility entirely.
+    cat > "$out/share/applications/pinokio.desktop" <<DESKTOP
+    [Desktop Entry]
+    Name=Pinokio
+    Exec=$out/bin/pinokio %U
+    Terminal=false
+    Type=Application
+    Icon=pinokio
+    StartupWMClass=Pinokio
+    Comment=AI browser that can install, run, and control any application automatically
+    Categories=Utility;Development;
+    MimeType=x-scheme-handler/pinokio;
+    DESKTOP
 
     # Wrapper: --no-sandbox is required inside nix-user-chroot because
     # Chromium's CLONE_NEWUSER namespace sandbox cannot work without
