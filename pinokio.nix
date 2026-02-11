@@ -83,6 +83,11 @@ stdenv.mkDerivation rec {
     xdg-utils
   ];
 
+  # The .deb bundles prebuilt musl-linked .node binaries (for Alpine)
+  # alongside the glibc ones. They will never run on a glibc system,
+  # but autoPatchelfHook fails trying to resolve libc.musl. Ignore it.
+  autoPatchelfIgnoreMissingDeps = [ "libc.musl-x86_64.so.1" ];
+
   unpackPhase = "dpkg-deb -x $src .";
 
   dontConfigure = true;
@@ -94,6 +99,12 @@ stdenv.mkDerivation rec {
     # Main application files (mirrors PKGBUILD's /opt/Pinokio layout)
     mkdir -p "$out/opt/Pinokio" "$out/bin" "$out/share/applications"
     cp -r opt/Pinokio/* "$out/opt/Pinokio/"
+
+    # Remove musl-linked prebuilt binaries. These are for Alpine Linux
+    # and are non-functional on glibc systems. Removing them also stops
+    # autoPatchelfHook from scanning them at all.
+    find "$out/opt/Pinokio" -name '*.musl.node' -delete
+    rm -rf "$out/opt/Pinokio/resources/app.asar.unpacked/node_modules/@parcel/watcher-linux-x64-musl" || true
 
     # Copy icons from the upstream .deb (if present)
     if [ -d usr/share/icons ]; then
