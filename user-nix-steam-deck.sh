@@ -9,28 +9,27 @@ title() { echo "$*"; sleep 0.5; printf "\033]0;%s\007" "$*"; }
 
 USER=$(id -u -n)
 
-if [ -d $N ]; then
+if [ -d "$N" ]; then
     echo "Nix already installed. Entering environment."
     echo "In future enter nix by running:"
     echo
     echo "  $N/enter"
     echo
-    exec $N/enter
+    exec "$N/enter"
 fi
 
-mkdir $N $N/root-nix $N/home $N/home/.config $N/home/.config/{nix,home-manager} || oops "Unable to create directories"
-ln -s $HOME $N/home/$USER || oops "unable to create $USER symlink"
-ln -s .config/home-manager/home.nix $N/home/home.nix || oops "unable to create home.nix symlink"
+mkdir "$N" "$N/root-nix" "$N/home" "$N/home/.config" "$N/home/.config/nix" "$N/home/.config/home-manager" || oops "Unable to create directories"
+ln -s "$HOME" "$N/home/$USER" || oops "unable to create $USER symlink"
 
 title "Downloading nix-user-chroot"
-wget -O $N/nix-user-chroot https://github.com/nix-community/nix-user-chroot/releases/download/1.2.2/nix-user-chroot-bin-1.2.2-x86_64-unknown-linux-musl || oops "Failed to download nix-user-chroot"
-chmod u+x $N/nix-user-chroot || oops "Unable to make $N/nix-user-chroot executable"
+wget -O "$N/nix-user-chroot" https://github.com/nix-community/nix-user-chroot/releases/download/1.2.2/nix-user-chroot-bin-1.2.2-x86_64-unknown-linux-musl || oops "Failed to download nix-user-chroot"
+chmod u+x "$N/nix-user-chroot" || oops "Unable to make $N/nix-user-chroot executable"
 
 title "Downloading nixos.org/nix/install"
-wget -O $N/nix.install https://nixos.org/nix/install || oops "Failed to download nixos.org/nix/install"
+wget -O "$N/nix.install" https://nixos.org/nix/install || oops "Failed to download nixos.org/nix/install"
 
 title "Creating files"
-cat <<EOF > $N/home/README
+cat <<EOF > "$N/home/README"
 Q1. How do I enter the nix environment? Run:
 
   $N/enter
@@ -67,17 +66,27 @@ Q5. Where is the home.nix and flake.nix?
 
 Q6. How do I rebuild after editing home.nix or flake.nix? Run:
 
-   home-manger switch  
+   home-manager switch
+
+Note: After initial setup, always use "home-manager switch" to rebuild.
+The bootstrap activation script is only used during first install.
 
 Q7. How do I update the programs?
 
-  nix registry pin nixpkgs
-  nix flake update ~/.config/home-manager
+  nix flake update --flake ~/.config/home-manager
   home-manager switch
 
-Q8. How do I delete programs that are no longer installed?
+Note: The flake.lock file pins exact package versions. "nix flake update"
+bumps all inputs (nixpkgs, home-manager) to their latest commits.
+
+Q8. How do I reclaim disk space?
 
   nix-collect-garbage -d
+  nix-store --optimise
+
+The first command removes old generations and unreferenced packages.
+The second deduplicates identical files in the store (can save 25-35%).
+Run both periodically, especially on limited storage.
 
 Q9. What is the layout of this install?
 
@@ -92,6 +101,13 @@ Q10. How do I remove everything, including the nix home directory?
   chmod -R u+w '$N'
   rm '$N' -r
 
+WARNING: Never run "nix profile install" or "nix profile remove" commands.
+These permanently corrupt the profile format used by home-manager and nix-env.
+If you accidentally ran one, delete ~/.nix-profile and rebuild:
+
+  rm -f ~/.nix-profile
+  home-manager switch
+
 Q11. Where are these instructions stored?
 
   $N/home/README
@@ -102,16 +118,21 @@ Q12. How do I enter the nix environment again? Run:
 
 EOF
 
-cat <<EOF > $N/home/.config/nix/nix.conf
+cat <<EOF > "$N/home/.config/nix/nix.conf"
 experimental-features = nix-command flakes
 max-jobs = auto
 auto-optimise-store = true
+warn-dirty = false
 EOF
 
-cat <<EOF > $N/home/.config/home-manager/flake.nix
+cat <<EOF > "$N/home/.config/home-manager/flake.nix"
 {
   inputs = {
-    hm.url = "github:nix-community/home-manager";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    hm = {
+      url = "github:nix-community/home-manager/release-25.11";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
   outputs = { self, nixpkgs, hm }: {
     homeConfigurations.$USER = hm.lib.homeManagerConfiguration {
@@ -124,7 +145,7 @@ cat <<EOF > $N/home/.config/home-manager/flake.nix
 }
 EOF
 
-cat <<EOF > $N/home/.config/home-manager/home.nix
+cat <<EOF > "$N/home/.config/home-manager/home.nix"
 # After editing this file, run:
 #
 #   home-manager switch
@@ -132,15 +153,24 @@ cat <<EOF > $N/home/.config/home-manager/home.nix
 { config, pkgs, ... }: {
   home.username = "$USER";
   home.homeDirectory = "$N/home";
+  # DO NOT CHANGE. This must stay at the version you first installed.
+  # Changing it can break your configuration. See:
+  # https://nix-community.github.io/home-manager/release-notes.xhtml
   home.stateVersion = "22.05";
 
   home.packages = (with pkgs; [
-    nix nettools bashInteractive
+    nix nettools bashInteractive glibcLocales
     # To find more packages, use:
     #
     #   nix search nixpkgs NAME
     #
   ]);
+
+  # Required for locale support inside the nix-user-chroot.
+  # Without this, bash warns about missing pt_BR.UTF-8 (or your locale).
+  home.sessionVariables = {
+    LOCALE_ARCHIVE = "\${pkgs.glibcLocales}/lib/locale/locale-archive";
+  };
 
   #To find more home-manager programs use:
   #
@@ -157,18 +187,19 @@ cat <<EOF > $N/home/.config/home-manager/home.nix
 }
 EOF
 
-cat <<EOF > $N/enter
+cat <<EOF > "$N/enter"
 #!/bin/bash
 export HOME=$N/home
 cd ~/
 du -hs $N
 echo "home:" \$HOME
+export LOCALE_ARCHIVE=\$HOME/.nix-profile/lib/locale/locale-archive
 exec $N/nix-user-chroot $N/root-nix ~/.nix-profile/bin/bash -l
 EOF
 
-chmod u+x $N/enter || oops "Unable to make $N/enter executable"
+chmod u+x "$N/enter" || oops "Unable to make $N/enter executable"
 
-cat <<EOF > $N/home-manager-flake.install
+cat <<EOF > "$N/home-manager-flake.install"
 oops() { echo "$0:" "$@" >&2; exit 1; }
 title() { printf "\033]0;%s\007" "$*"; }
 
@@ -180,10 +211,10 @@ nix registry pin nixpkgs || oops "failed to: nix registry pin nixpkgs"
 
 title "Building home-manager configuration"
 nix-env --set-flag priority 10 nix || oops "failed to: nix-env --set-flag priority 10 nix"
-nix build --no-link ~/.config/home-manager/flake.nix#homeConfigurations.$USER.activationPackage || oops "failed to build ~/.config/home-manager/flake.nix#homeConfigurations.$USER.activationPackage"
+nix build --no-link ~/.config/home-manager#homeConfigurations.$USER.activationPackage || oops "failed to build ~/.config/home-manager#homeConfigurations.$USER.activationPackage"
 
 title "Activating home-manager configuration"
-"\$(nix path-info ~/.config/home-manager/flake.nix#homeConfigurations.$USER.activationPackage)"/activate || oops "failed to activate home-manager config"
+"\$(nix path-info ~/.config/home-manager#homeConfigurations.$USER.activationPackage)"/activate || oops "failed to activate home-manager config"
 
 title "Removing nix-env's nix command"
 nix-env -e nix || oops "failed to remove nix-env's version of the nix command"
@@ -193,15 +224,15 @@ nix-collect-garbage -d || oops "failed to nix-collect-garbage -d"
 EOF
 
 title "Running nixos.org/nix/install"
-HOME=$N/home $N/nix-user-chroot $N/root-nix /bin/bash $N/nix.install || oops "nixos.org/nix/install failed"
+HOME="$N/home" "$N/nix-user-chroot" "$N/root-nix" /bin/bash "$N/nix.install" || oops "nixos.org/nix/install failed"
 
 title "Installing home-manager"
-HOME=$N/home $N/nix-user-chroot $N/root-nix /bin/bash $N/home-manager-flake.install || oops "home-manager-flake.install failed"
+HOME="$N/home" "$N/nix-user-chroot" "$N/root-nix" /bin/bash "$N/home-manager-flake.install" || oops "home-manager-flake.install failed"
 
 echo
-du -hs $N
+du -hs "$N"
 echo
-cat $N/home/README
+cat "$N/home/README"
 
-$N/enter
+"$N/enter"
 }
