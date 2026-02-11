@@ -28,6 +28,10 @@ chmod u+x "$N/nix-user-chroot" || oops "Unable to make $N/nix-user-chroot execut
 title "Downloading nixos.org/nix/install"
 wget -O "$N/nix.install" https://nixos.org/nix/install || oops "Failed to download nixos.org/nix/install"
 
+title "Downloading pinokio package files"
+wget -O "$N/home/.config/home-manager/pinokio.nix" https://raw.githubusercontent.com/ThomasEricB/pinokio-with-user-nix/refs/heads/main/pinokio.nix || oops "Failed to download pinokio.nix"
+wget -O "$N/home/.config/home-manager/pinokio-flake.nix" https://raw.githubusercontent.com/ThomasEricB/pinokio-with-user-nix/refs/heads/main/pinokio-flake.nix || oops "Failed to download pinokio-flake.nix"
+
 title "Creating files"
 cat <<EOF > "$N/home/README"
 Q1. How do I enter the nix environment? Run:
@@ -92,8 +96,10 @@ Q9. What is the layout of this install?
 
   dir          $N
   enter script $N/enter
+  pinokio      $N/pinokio.sh
   home         $N/home
   README       $N/home/README
+  pinokio pkg  $N/home/.config/home-manager/pinokio.nix
   nix store    $N/root-nix/store
 
 Q10. How do I remove everything, including the nix home directory?
@@ -115,6 +121,15 @@ Q11. Where are these instructions stored?
 Q12. How do I enter the nix environment again? Run:
 
   $N/enter
+
+Q13. How do I launch Pinokio?
+
+  $N/pinokio.sh
+
+This runs the installed Pinokio through the nix-user-chroot.
+You can also launch it from inside the nix environment with:
+
+  pinokio
 
 EOF
 
@@ -150,7 +165,12 @@ cat <<EOF > "$N/home/.config/home-manager/home.nix"
 #
 #   home-manager switch
 #
-{ config, pkgs, ... }: {
+{ config, pkgs, ... }:
+
+let
+  pinokio = pkgs.callPackage ./pinokio.nix {};
+in
+{
   home.username = "$USER";
   home.homeDirectory = "$N/home";
   # DO NOT CHANGE. This must stay at the version you first installed.
@@ -164,7 +184,7 @@ cat <<EOF > "$N/home/.config/home-manager/home.nix"
     #
     #   nix search nixpkgs NAME
     #
-  ]);
+  ]) ++ [ pinokio ];
 
   # Required for locale support inside the nix-user-chroot.
   # Without this, bash warns about missing pt_BR.UTF-8 (or your locale).
@@ -198,6 +218,15 @@ exec $N/nix-user-chroot $N/root-nix ~/.nix-profile/bin/bash -l
 EOF
 
 chmod u+x "$N/enter" || oops "Unable to make $N/enter executable"
+
+cat <<EOF > "$N/pinokio.sh"
+#!/bin/bash
+export HOME=$N/home
+export LOCALE_ARCHIVE=\$HOME/.nix-profile/lib/locale/locale-archive
+exec $N/nix-user-chroot $N/root-nix \$HOME/.nix-profile/bin/pinokio "\$@"
+EOF
+
+chmod u+x "$N/pinokio.sh" || oops "Unable to make $N/pinokio.sh executable"
 
 cat <<EOF > "$N/home-manager-flake.install"
 oops() { echo "$0:" "$@" >&2; exit 1; }
