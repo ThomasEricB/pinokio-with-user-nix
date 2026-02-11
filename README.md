@@ -1,5 +1,5 @@
-# pinokio-with-user-nix
-Do you want to install [Pinokio](https://pinokio.co/) on your immutable distro (SteamOS, Bazzite) without messing with the base system? This script creates a single directory (~/nix) that installs a ~1GB [NixOS](https://nixos.org/) environment. Packages are managed declaratively using [home-manager](https://github.com/nix-community/home-manager) and [flakes](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html). 
+# Pinokio-with-user-Nix
+Do you want to install [Pinokio](https://pinokio.co/) on your immutable distro (SteamOS, Bazzite) without messing with the base system? This script creates a single directory (~/nix) that installs a ~1GB [NixOS](https://nixos.org/) environment setup with an up-to-date Pinokio! All packages are managed declaratively using [home-manager](https://github.com/nix-community/home-manager) and [flakes](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html). 
 
 **Many thanks to [Quag](https://github.com/quag) for the original script!**
 
