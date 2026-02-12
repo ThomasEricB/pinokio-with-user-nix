@@ -35,12 +35,7 @@ stdenv.mkDerivation rec {
 
   src = fetchurl {
     url = "https://github.com/pinokiocomputer/pinokio/releases/download/v${version}/Pinokio_${version}_arm64.deb";
-    # TODO: Replace with the real hash. Run:
-    #   nix-prefetch-url --type sha256 https://github.com/pinokiocomputer/pinokio/releases/download/v6.0.10/Pinokio_6.0.10_arm64.deb
-    # Then convert to SRI with:
-    #   nix hash convert --hash-algo sha256 --to sri <hex-hash>
-    # Or just set to "" and let the first build error tell you the correct hash.
-    hash = "";
+    hash = "sha256-6T5Mu80R50chhL8W/RG7/LswPmqc6K7ibhtrqBJlNAE=";
   };
 
   nativeBuildInputs = [
